@@ -6,7 +6,9 @@
 
 #include <cstdlib>
 #include <cstring>
-#include <dlfcn.h>
+#ifndef _WIN32
+  #include <dlfcn.h>
+#endif
 #include <functional>
 #include <iostream>
 #include <new>
@@ -18,10 +20,15 @@ extern volatile int g_allocation_count;
 extern volatile int g_deallocation_count;
 extern volatile bool g_tracking_enabled;
 
+// Installs any platform-specific allocation hook before tracking begins.
+void prepare_tracking();
+
 // Original malloc/free functions
+#ifndef _WIN32
 extern void* (*original_malloc)(size_t);
 extern void (*original_free)(void*);
 extern void* (*original_realloc)(void*, size_t);
+#endif
 
 // Helper function to run allocation tracking tests
 // setup: Function to run before tracking starts (can be nullptr)
@@ -37,6 +44,8 @@ void run_allocation_test(std::function<void()> setup, TestFunc test, std::functi
   // Run setup if provided
   if (setup)
     setup();
+
+  prepare_tracking();
 
   // Reset allocation counters and enable tracking
   g_allocation_count = 0;
@@ -79,6 +88,8 @@ void run_allocation_test_expect_allocations(std::function<void()> setup, TestFun
   // Run setup if provided
   if (setup)
     setup();
+
+  prepare_tracking();
 
   // Reset allocation counters and enable tracking
   g_allocation_count = 0;

@@ -2,6 +2,10 @@ file(GLOB NAM_SOURCES_TOP "${CMAKE_CURRENT_SOURCE_DIR}/../NAM/*.cpp" "${CMAKE_CU
 file(GLOB NAM_SOURCES_SUB "${CMAKE_CURRENT_SOURCE_DIR}/../NAM/*/*.cpp")
 set(NAM_SOURCES ${NAM_SOURCES_TOP} ${NAM_SOURCES_SUB})
 
+if (MSVC)
+	add_compile_definitions(_USE_MATH_DEFINES)
+endif()
+
 # TODO: add loadmodel and run_tests to TOOLS?
 set(TOOLS benchmodel)
 
@@ -21,7 +25,9 @@ add_executable(benchmodel benchmodel.cpp ${NAM_SOURCES})
 add_executable(render render.cpp ${NAM_SOURCES} ${AUDIO_DSP_TOOLS_WAV_SOURCES})
 target_compile_features(render PUBLIC cxx_std_20)
 # AudioDSPTools wav.cpp has sign-compare issues; don't fail build
-set_source_files_properties(${AUDIO_DSP_TOOLS_WAV_SOURCES} PROPERTIES COMPILE_FLAGS "-Wno-error")
+if (NOT MSVC)
+	set_source_files_properties(${AUDIO_DSP_TOOLS_WAV_SOURCES} PROPERTIES COMPILE_FLAGS "-Wno-error")
+endif()
 set_target_properties(render PROPERTIES
 	CXX_VISIBILITY_PRESET hidden
 	INTERPROCEDURAL_OPTIMIZATION TRUE
@@ -65,12 +71,16 @@ endif()
 add_executable(run_tests run_tests.cpp test/allocation_tracking.cpp ${NAM_SOURCES})
 # Compile run_tests without optimizations to ensure allocation tracking works correctly
 # Also ensure assertions are enabled (NDEBUG is not defined) so tests actually run
-set_target_properties(run_tests PROPERTIES COMPILE_OPTIONS "-O0")
+if (MSVC)
+	target_compile_options(run_tests PRIVATE /Od)
+else()
+	target_compile_options(run_tests PRIVATE -O0)
+endif()
 # Ensure assertions are enabled for run_tests by removing NDEBUG if it was set
 # Release/RelWithDebInfo/MinSizeRel build types automatically define NDEBUG
 # We use a compile option to undefine it, which works on GCC, Clang, and MSVC
 target_compile_options(run_tests PRIVATE
-	$<$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>:-UNDEBUG>
+	$<$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>:$<IF:$<CXX_COMPILER_ID:MSVC>,/UNDEBUG,-UNDEBUG>>
 )
 
 # Option to enable ADDASSERT test (tests that assertions are actually enabled)
@@ -110,5 +120,7 @@ endif()
 # There's an error in eigen's
 # /Users/steve/src/NeuralAmpModelerCore/Dependencies/eigen/Eigen/src/Core/products/GeneralBlockPanelKernel.h
 # Don't let this break my build on debug:
-set_source_files_properties(../NAM/dsp.cpp PROPERTIES COMPILE_FLAGS "-Wno-error")
-set_source_files_properties(../NAM/conv1d.cpp PROPERTIES COMPILE_FLAGS "-Wno-error")
+if (NOT MSVC)
+	set_source_files_properties(../NAM/dsp.cpp PROPERTIES COMPILE_FLAGS "-Wno-error")
+	set_source_files_properties(../NAM/conv1d.cpp PROPERTIES COMPILE_FLAGS "-Wno-error")
+endif()

@@ -4,6 +4,10 @@
 
 #include "allocation_tracking.h"
 
+#if defined(_WIN32) && defined(_DEBUG)
+  #include <crtdbg.h>
+#endif
+
 // Allocation tracking globals - definitions
 namespace allocation_tracking
 {
@@ -12,12 +16,49 @@ volatile int g_deallocation_count = 0;
 volatile bool g_tracking_enabled = false;
 
 // Original malloc/free functions
+#ifndef _WIN32
 void* (*original_malloc)(size_t) = nullptr;
 void (*original_free)(void*) = nullptr;
 void* (*original_realloc)(void*, size_t) = nullptr;
+#endif
+
+#if defined(_WIN32) && defined(_DEBUG)
+namespace
+{
+int __cdecl allocation_hook(int allocation_type, void*, size_t, int, long, const unsigned char*, int)
+{
+  if (!allocation_tracking::g_tracking_enabled)
+    return 1;
+
+  if (allocation_type == _HOOK_ALLOC)
+    ++allocation_tracking::g_allocation_count;
+  else if (allocation_type == _HOOK_FREE)
+    ++allocation_tracking::g_deallocation_count;
+  else if (allocation_type == _HOOK_REALLOC)
+  {
+    ++allocation_tracking::g_allocation_count;
+    ++allocation_tracking::g_deallocation_count;
+  }
+
+  return 1;
+}
+} // namespace
+#endif
+
+void prepare_tracking()
+{
+#if defined(_WIN32) && defined(_DEBUG)
+  static const bool installed = []() {
+    _CrtSetAllocHook(allocation_hook);
+    return true;
+  }();
+  (void)installed;
+#endif
+}
 } // namespace allocation_tracking
 
 // Override malloc/free to track Eigen allocations (Eigen uses malloc directly)
+#ifndef _WIN32
 extern "C" {
 void* malloc(size_t size)
 {
@@ -53,6 +94,7 @@ void* realloc(void* ptr, size_t size)
   return new_ptr;
 }
 }
+#endif
 
 // Overload global new/delete operators to track allocations
 void* operator new(std::size_t size)
